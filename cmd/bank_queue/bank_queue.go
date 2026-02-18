@@ -44,7 +44,6 @@ func (s *Specialist) Work() {
 			fmt.Printf("[Клиент %d] обрабатывается", client.ID)
 			time.Sleep(1000 * time.Microsecond)
 		case <-s.quit:
-			s.wg.Done()
 			return
 		}
 	}
@@ -55,13 +54,14 @@ func (m *BankManager) Run() {
 		for _, employee := range m.Employees {
 			m.wg.Add(1)
 			employee.Work()
+			m.wg.Done()
 		}
 	}()
 
 	go func() {
-		for range 15 {
-			client := <-m.GlobalQueue
-			fmt.Println(client)
+		for client := range m.GlobalQueue {
+			window := <-m.Boards[client.Request]
+			window <- client
 		}
 	}()
 }
@@ -123,5 +123,6 @@ func main() {
 		client := Client{ID: 1, Name: fmt.Sprintf("Клиент %d", i), Request: serviceType}
 		manager.GlobalQueue <- client
 	}
+	close(manager.GlobalQueue)
 	manager.wg.Wait()
 }
