@@ -30,20 +30,35 @@ type Specialist struct {
 type BankManager struct {
 	GlobalQueue chan Client
 	Boards      map[ServiceType]chan chan Client
-	Employee    []*Specialist
+	Employees   []*Specialist
 	wg          sync.WaitGroup
 }
 
 func (s *Specialist) Work() {
+	for {
+		s.ReadyBoard <- s.Window
 
+		select {
+		case client := <- s.Window:
+			fmt.Printf("[Клиент %d] обрабатывается", client.ID)
+		case <-s.quit:
+			return	
+		}
+	}
 }
 
 func (m *BankManager) Run() {
-	go func ()  {
+	go func() {
+		for _, employee := range m.Employees {
+			employee.Work()
+		}
+	}()
+
+	go func() {
 		for range 15 {
-		client := <-m.GlobalQueue
-		fmt.Println(client)
-	}	
+			client := <-m.GlobalQueue
+			fmt.Println(client)
+		}
 	}()
 }
 
@@ -65,15 +80,17 @@ func CreateManager() *BankManager {
 }
 
 func CreateSpecialist(ID int, queue chan chan Client) *Specialist {
-	s := &Specialist{}
-	s.ReadyBoard = queue
+	s := &Specialist{
+		Window:     make(chan Client),
+		ReadyBoard: queue,
+	}
 
 	return s
 }
 
 func main() {
 	manager := CreateManager()
-	manager.Employee = make([]*Specialist, 5)
+	manager.Employees = make([]*Specialist, 5)
 	for i := range 5 {
 		var serviceType ServiceType
 		if i%2 == 0 {
@@ -83,7 +100,7 @@ func main() {
 		}
 
 		specialist := CreateSpecialist(i, manager.Boards[serviceType])
-		manager.Employee = append(manager.Employee, specialist)
+		manager.Employees = append(manager.Employees, specialist)
 
 		fmt.Println(specialist)
 		fmt.Println(manager)
