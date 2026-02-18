@@ -36,12 +36,15 @@ type BankManager struct {
 }
 
 func (s *Specialist) Work() {
+	defer s.wg.Done()
 	for {
-		s.ReadyBoard <- s.Window
-
 		select {
-		case client := <-s.Window:
-			fmt.Printf("[Клиент %d] обрабатывается", client.ID)
+		case s.ReadyBoard <- s.Window:
+			client, ok := <-s.Window
+			if !ok {
+				return
+			}
+			fmt.Printf("[Клиент %d] обрабатывается специалистом %d\n", client.ID, s.ID)
 			time.Sleep(1000 * time.Microsecond)
 		case <-s.quit:
 			return
@@ -50,18 +53,19 @@ func (s *Specialist) Work() {
 }
 
 func (m *BankManager) Run() {
-	go func() {
-		for _, employee := range m.Employees {
-			m.wg.Add(1)
-			employee.Work()
-			m.wg.Done()
-		}
-	}()
+	for _, employee := range m.Employees {
+		m.wg.Add(1)
+		go employee.Work()
+	}
 
 	go func() {
 		for client := range m.GlobalQueue {
 			window := <-m.Boards[client.Request]
 			window <- client
+		}
+
+		for _, employee := range m.Employees {
+			close(employee.quit)
 		}
 	}()
 }
@@ -70,6 +74,7 @@ func CreateManager() *BankManager {
 	m := &BankManager{
 		GlobalQueue: make(chan Client),
 		Boards:      make(map[ServiceType]chan chan Client),
+		wg:          &sync.WaitGroup{},
 	}
 
 	if _, ok := m.Boards[Deposit]; !ok {
@@ -85,9 +90,11 @@ func CreateManager() *BankManager {
 
 func CreateSpecialist(ID int, queue chan chan Client, wg *sync.WaitGroup) *Specialist {
 	s := &Specialist{
+		ID: ID,
 		Window:     make(chan Client),
 		ReadyBoard: queue,
 		wg:         wg,
+		quit:       make(chan bool),
 	}
 
 	return s
@@ -95,7 +102,6 @@ func CreateSpecialist(ID int, queue chan chan Client, wg *sync.WaitGroup) *Speci
 
 func main() {
 	manager := CreateManager()
-	manager.Employees = make([]*Specialist, 5)
 	for i := range 5 {
 		var serviceType ServiceType
 		if i%2 == 0 {
@@ -120,7 +126,7 @@ func main() {
 		} else {
 			serviceType = Credit
 		}
-		client := Client{ID: 1, Name: fmt.Sprintf("Клиент %d", i), Request: serviceType}
+		client := Client{ID: i, Name: fmt.Sprintf("Клиент %d", i), Request: serviceType}
 		manager.GlobalQueue <- client
 	}
 	close(manager.GlobalQueue)
