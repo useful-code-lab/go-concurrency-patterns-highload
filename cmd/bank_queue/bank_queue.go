@@ -39,7 +39,12 @@ func (s *Specialist) Work() {
 }
 
 func (m *BankManager) Run() {
-
+	go func ()  {
+		for range 15 {
+		client := <-m.GlobalQueue
+		fmt.Println(client)
+	}	
+	}()
 }
 
 func CreateManager() *BankManager {
@@ -82,6 +87,18 @@ func main() {
 
 		fmt.Println(specialist)
 		fmt.Println(manager)
+	}
 
+	manager.Run()
+
+	for i := range 15 {
+		var serviceType ServiceType
+		if i%2 == 0 {
+			serviceType = Deposit
+		} else {
+			serviceType = Credit
+		}
+		client := Client{ID: 1, Name: fmt.Sprintf("Клиент %d", i), Request: serviceType}
+		manager.GlobalQueue <- client
 	}
 }
