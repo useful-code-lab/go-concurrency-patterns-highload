@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch CMD bank_queue",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/cmd/bank_queue/bank_queue.go",
+            "env": {},
+            "args": []
+        },
+    ]
+}
