@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
 type ServiceType string
@@ -24,14 +25,14 @@ type Specialist struct {
 	Window     chan Client
 	ReadyBoard chan chan Client
 	quit       chan bool
-	wg         sync.WaitGroup
+	wg         *sync.WaitGroup
 }
 
 type BankManager struct {
 	GlobalQueue chan Client
 	Boards      map[ServiceType]chan chan Client
 	Employees   []*Specialist
-	wg          sync.WaitGroup
+	wg          *sync.WaitGroup
 }
 
 func (s *Specialist) Work() {
@@ -39,10 +40,12 @@ func (s *Specialist) Work() {
 		s.ReadyBoard <- s.Window
 
 		select {
-		case client := <- s.Window:
+		case client := <-s.Window:
 			fmt.Printf("[Клиент %d] обрабатывается", client.ID)
+			time.Sleep(1000 * time.Microsecond)
 		case <-s.quit:
-			return	
+			s.wg.Done()
+			return
 		}
 	}
 }
@@ -50,6 +53,7 @@ func (s *Specialist) Work() {
 func (m *BankManager) Run() {
 	go func() {
 		for _, employee := range m.Employees {
+			m.wg.Add(1)
 			employee.Work()
 		}
 	}()
@@ -63,10 +67,10 @@ func (m *BankManager) Run() {
 }
 
 func CreateManager() *BankManager {
-	m := &BankManager{}
-	m.GlobalQueue = make(chan Client)
-
-	m.Boards = make(map[ServiceType]chan chan Client)
+	m := &BankManager{
+		GlobalQueue: make(chan Client),
+		Boards:      make(map[ServiceType]chan chan Client),
+	}
 
 	if _, ok := m.Boards[Deposit]; !ok {
 		m.Boards[Deposit] = make(chan chan Client)
@@ -79,10 +83,11 @@ func CreateManager() *BankManager {
 	return m
 }
 
-func CreateSpecialist(ID int, queue chan chan Client) *Specialist {
+func CreateSpecialist(ID int, queue chan chan Client, wg *sync.WaitGroup) *Specialist {
 	s := &Specialist{
 		Window:     make(chan Client),
 		ReadyBoard: queue,
+		wg:         wg,
 	}
 
 	return s
@@ -99,7 +104,7 @@ func main() {
 			serviceType = Credit
 		}
 
-		specialist := CreateSpecialist(i, manager.Boards[serviceType])
+		specialist := CreateSpecialist(i, manager.Boards[serviceType], manager.wg)
 		manager.Employees = append(manager.Employees, specialist)
 
 		fmt.Println(specialist)
@@ -118,4 +123,5 @@ func main() {
 		client := Client{ID: 1, Name: fmt.Sprintf("Клиент %d", i), Request: serviceType}
 		manager.GlobalQueue <- client
 	}
+	manager.wg.Wait()
 }
