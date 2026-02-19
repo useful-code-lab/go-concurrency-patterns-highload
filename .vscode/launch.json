@@ -10,5 +10,14 @@
             "env": {},
             "args": []
         },
+        {
+            "name": "Launch CMD tb_rate_limiter",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/cmd/tb_rate_limiter/tb_rate_limiter.go",
+            "env": {},
+            "args": []
+        },
     ]
 }
