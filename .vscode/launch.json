@@ -19,5 +19,14 @@
             "env": {},
             "args": []
         },
+        {
+            "name": "Launch CMD multiplex_fan_in",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/cmd/multiplex_fan_in/multiplex_fan_in.go",
+            "env": {},
+            "args": []
+        },
     ]
 }
