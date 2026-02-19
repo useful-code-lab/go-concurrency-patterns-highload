@@ -19,7 +19,7 @@ type Task struct {
 }
 
 func (t *Task) Process() {
-	fmt.Printf("Задача %d запущена", t.ID)
+	fmt.Printf("Задача %d запущена\n", t.ID)
 }
 
 func Init() {
@@ -54,7 +54,12 @@ func Run() {
 func main() {
 	context, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	Init()
+	go Run()
+
+	for i := range 10 {
+		AddTask(Task{ID: i + 1})
+	}
 
 	context.Done()
-
 }
