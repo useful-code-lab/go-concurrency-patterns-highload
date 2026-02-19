@@ -29,14 +29,24 @@ func Init() {
 	ticker = time.NewTicker(2 * time.Second)
 }
 
+func AddTask(task Task) {
+	taskQueue <- task
+}
+
 func Run() {
-	for range ticker.C {
+	for {
 		select {
-		case task, ok := <-taskQueue:
-			if ok {
-				go task.Process()
+		case <-ticker.C:
+			select {
+			case task, ok := <-taskQueue:
+				if ok {
+					go task.Process()
+				}
+			default:
 			}
-		default:
+		case <-context.Background().Done():
+			ticker.Stop()
+			return
 		}
 	}
 }
