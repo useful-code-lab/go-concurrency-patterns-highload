@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -25,7 +26,7 @@ func (t *Task) Process() {
 func Init() {
 	rateN = 50  // Количество доступных "токенов" (разрешений на выполнение) за период.
 	periodT = 1 // Временной интервал (например, 1 секунда).
-	taskQueue = make(chan Task)
+	taskQueue = make(chan Task, 100)
 	ticker = time.NewTicker(2 * time.Second)
 }
 
@@ -33,7 +34,7 @@ func AddTask(task Task) {
 	taskQueue <- task
 }
 
-func Run() {
+func Run(ctx context.Context, wg *sync.WaitGroup) {
 	semaphore := make(chan struct{}, 3)
 	for {
 		select {
@@ -41,18 +42,18 @@ func Run() {
 			select {
 			case task, ok := <-taskQueue:
 				if ok {
-					semaphore <- struct{}{}
-					go func(t Task) {
+					semaphore <- struct{}{}					
+					go func(t Task) {	
+						defer wg.Done()					
 						defer func() {
 							<-semaphore
 						}()
-
-						go task.Process()
+						task.Process()						
 					}(task)
 				}
 			default:
 			}
-		case <-context.Background().Done():
+		case <-ctx.Done():
 			ticker.Stop()
 			return
 		}
@@ -60,14 +61,17 @@ func Run() {
 }
 
 func main() {
-	context, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	var wg sync.WaitGroup
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	Init()
-	go Run()
+	go Run(ctx, &wg)
 
 	for i := range 10 {
+		wg.Add(1)
 		AddTask(Task{ID: i + 1})
 	}
 
-	context.Done()
+	wg.Wait()
+	<-ctx.Done()
 }
