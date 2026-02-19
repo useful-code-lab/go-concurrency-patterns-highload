@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
 )
 
@@ -43,25 +44,38 @@ func main() {
 	wg := sync.WaitGroup{}
 	ctx := context.Background()
 
-	wg.Add(3)
-
-	source1 := make(chan int)
+	source1 := make(chan int, 30)
 	source2 := make(chan int, 30)
-	source3 := make(chan int)
+	source3 := make(chan int, 30)
 
-	for i := range 15 {
-		source1 <- i
+	results := Multiplex(&wg, ctx, source1, source2, source3)
+
+	go func() {
+		for i := range 15 {
+			source1 <- i
+		}
+		close(source1)
+	}()
+
+	go func() {
+		for i := range 20 {
+			source2 <- i * 2
+		}
+		close(source2)
+	}()
+
+	go func() {
+		for i := range 30 {
+			source3 <- i * 3
+		}
+		close(source3)
+	}()
+
+	count := 1
+	for result := range results {
+		fmt.Printf("%d-й элемент %d\n", count, result)
+		count++
 	}
-
-	for i := range 20 {
-		source1 <- i * 2
-	}
-
-	for i := range 30 {
-		source3 <- i * 3
-	}
-
-	Multiplex(&wg, ctx, source1, source2, source3)
 
 	wg.Wait()
 }
