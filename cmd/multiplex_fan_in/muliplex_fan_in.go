@@ -5,9 +5,38 @@ import (
 	"sync"
 )
 
-func Multiplex[T any](wg *sync.WaitGroup, sources ...<-chan T) {
+func Multiplex[T any](wg *sync.WaitGroup, ctx context.Context, sources ...<-chan T) <-chan T {
 	resultCh := make(chan T)
+	for _, source := range sources {
+		wg.Add(1)
 
+		go func(s <-chan T) {
+			defer wg.Done()
+			for {
+				select {
+				case data, ok := <-s:
+					if !ok {
+						return
+					}
+					select {
+					case resultCh <- data:
+					case <-ctx.Done():
+						return
+					}
+
+				case <-ctx.Done():
+					return
+				}
+			}
+		}(source)
+	}
+
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	return resultCh
 }
 
 func main() {
@@ -32,8 +61,7 @@ func main() {
 		source3 <- i * 3
 	}
 
-	Multiplex(&wg, source1, source2, source3)
+	Multiplex(&wg, ctx, source1, source2, source3)
 
 	wg.Wait()
-
 }
