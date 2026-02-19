@@ -34,13 +34,21 @@ func AddTask(task Task) {
 }
 
 func Run() {
+	semaphore := make(chan struct{}, 3)
 	for {
 		select {
 		case <-ticker.C:
 			select {
 			case task, ok := <-taskQueue:
 				if ok {
-					go task.Process()
+					semaphore <- struct{}{}
+					go func(t Task) {
+						defer func() {
+							<-semaphore
+						}()
+
+						go task.Process()
+					}(task)
 				}
 			default:
 			}
