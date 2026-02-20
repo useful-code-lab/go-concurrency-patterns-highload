@@ -37,5 +37,14 @@
             "env": {},
             "args": []
         },
+        {
+            "name": "Launch CMD adaptive_worker_pool",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/cmd/adaptive_worker_pool/adaptive_worker_pool.go",
+            "env": {},
+            "args": []
+        },
     ]
 }
