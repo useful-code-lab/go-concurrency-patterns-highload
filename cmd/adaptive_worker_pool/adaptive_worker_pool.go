@@ -17,33 +17,42 @@ type Pool struct {
 	Quit           chan bool //Канал для завершения
 
 	mu sync.Mutex //Мьютекс
+	pg sync.WaitGroup
 }
 
 func (p *Pool) Worker() {
-	p.mu.Lock()
-	p.CurrentWorkers++
-	p.mu.Unlock()
-
-	timer := time.NewTimer(time.Second * 4)
+	p.pg.Done()
+	idleTimeout := time.Second * 4
+	timer := time.NewTimer(idleTimeout)
 	defer timer.Stop()
 
 	for {
 		select {
-		case task := <-p.Tasks:
+		case task, ok := <-p.Tasks:
+			if !ok {
+				return
+			}
 			task()
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer.Reset(idleTimeout)
+
 		case <-timer.C:
 			p.mu.Lock()
 			if p.CurrentWorkers > p.MinWorkers {
-				p.mu.Lock()
 				p.CurrentWorkers--
 				p.mu.Unlock()
 				return
 			}
 			p.mu.Unlock()
-			timer.Reset(time.Second * 4)
+			timer.Reset(idleTimeout)
 		case <-p.Quit:
 			return
-		}	
+		}
 	}
 }
 
@@ -55,7 +64,11 @@ func NewPool(tasks chan Task, maxWorkers int, minWorker int) *Pool {
 		Quit:       make(chan bool),
 	}
 
-	for i := 0; i <= p.MinWorkers; i++ {
+	for i := 0; i < p.MinWorkers; i++ {
+		p.mu.Lock()
+		p.CurrentWorkers++
+		p.mu.Unlock()
+		p.pg.Add(1)
 		go p.Worker()
 	}
 
@@ -69,6 +82,8 @@ func (p *Pool) CreateAutoTask() {
 		time.Sleep(time.Millisecond * 10)
 		p.mu.Lock()
 		if len(p.Tasks) > 6 && p.CurrentWorkers < p.MaxWorkers {
+			p.CurrentWorkers++
+			p.pg.Add(1)
 			go p.Worker()
 		}
 		p.mu.Unlock()
@@ -84,6 +99,12 @@ func (p *Pool) Submit(task Task) error {
 	}
 }
 
+func (p *Pool) Shutdown(){
+	close(p.Tasks)
+	close(p.Quit)
+	p.pg.Wait()
+}
+
 func main() {
 	tasks := make(chan Task, 100)
 	pool := NewPool(tasks, 5, 2)
@@ -95,5 +116,5 @@ func main() {
 		})
 	}
 
-	close(pool.Quit)
+	pool.Shutdown()
 }
