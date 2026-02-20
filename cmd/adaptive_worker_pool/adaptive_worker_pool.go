@@ -24,22 +24,26 @@ func (p *Pool) Worker() {
 	p.CurrentWorkers++
 	p.mu.Unlock()
 
+	timer := time.NewTimer(time.Second * 4)
+	defer timer.Stop()
+
 	for {
-		func() {
-			select {
-			case task := <-p.Tasks:
-				task()
-			case <-time.After(time.Second * 5):
-				if p.CurrentWorkers > p.MinWorkers {
-					p.mu.Lock()
-					p.CurrentWorkers--
-					p.mu.Unlock()
-					return
-				}
-			case <-p.Quit:
+		select {
+		case task := <-p.Tasks:
+			task()
+		case <-timer.C:
+			p.mu.Lock()
+			if p.CurrentWorkers > p.MinWorkers {
+				p.mu.Lock()
+				p.CurrentWorkers--
+				p.mu.Unlock()
 				return
 			}
-		}()
+			p.mu.Unlock()
+			timer.Reset(time.Second * 4)
+		case <-p.Quit:
+			return
+		}	
 	}
 }
 
@@ -52,7 +56,6 @@ func NewPool(tasks chan Task, maxWorkers int, minWorker int) *Pool {
 	}
 
 	for i := 0; i <= p.MinWorkers; i++ {
-		p.CurrentWorkers++
 		go p.Worker()
 	}
 
@@ -64,9 +67,11 @@ func NewPool(tasks chan Task, maxWorkers int, minWorker int) *Pool {
 func (p *Pool) CreateAutoTask() {
 	for {
 		time.Sleep(time.Millisecond * 10)
-		if len(p.Tasks) > 6 {
+		p.mu.Lock()
+		if len(p.Tasks) > 6 && p.CurrentWorkers < p.MaxWorkers {
 			go p.Worker()
 		}
+		p.mu.Unlock()
 	}
 }
 
@@ -84,11 +89,11 @@ func main() {
 	pool := NewPool(tasks, 5, 2)
 
 	for i := range 50 {
-		tasks <- func() {
+		pool.Submit(func() {
 			fmt.Printf("Выполняется функция %d", i)
 			time.Sleep(time.Second * 4)
-		}
+		})
 	}
 
-	pool.Quit <- true
+	close(pool.Quit)
 }
