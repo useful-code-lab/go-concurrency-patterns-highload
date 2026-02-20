@@ -19,7 +19,7 @@ type Pool struct {
 	mu sync.Mutex //Мьютекс
 }
 
-func (p *Pool) Worker(tasks <-chan Task) {
+func (p *Pool) Worker() {
 	p.mu.Lock()
 	p.CurrentWorkers++
 	p.mu.Unlock()
@@ -27,7 +27,7 @@ func (p *Pool) Worker(tasks <-chan Task) {
 	for {
 		func() {
 			select {
-			case task := <-tasks:
+			case task := <-p.Tasks:
 				task()
 			case <-time.After(time.Second * 5):
 				if p.CurrentWorkers > p.MinWorkers {
@@ -53,10 +53,21 @@ func NewPool(tasks chan Task, maxWorkers int, minWorker int) *Pool {
 
 	for i := 0; i <= p.MinWorkers; i++ {
 		p.CurrentWorkers++
-		go p.Worker(tasks)
+		go p.Worker()
 	}
 
+	go p.CreateAutoTask()
+
 	return p
+}
+
+func (p *Pool) CreateAutoTask() {
+	for {
+		time.Sleep(time.Millisecond * 10)
+		if len(p.Tasks) > 6 {
+			go p.Worker()
+		}
+	}
 }
 
 func (p *Pool) Submit(task Task) error {
