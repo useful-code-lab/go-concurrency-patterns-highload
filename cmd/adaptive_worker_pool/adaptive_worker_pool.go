@@ -105,8 +105,8 @@ func (p *Pool) Submit(task Task) error {
 }
 
 func (p *Pool) Shutdown() {
-	close(p.Tasks)
 	close(p.Quit)
+	close(p.Tasks)
 	p.pg.Wait()
 }
 
@@ -114,7 +114,7 @@ func main() {
 	tasks := make(chan Task, 100)
 	pool := NewPool(tasks, 5, 2)
 
-	for i := range 50 {
+	for i := 0; i < 50; i++ {
 		pool.Submit(func() {
 			fmt.Printf("Выполняется функция %d\n", i)
 			time.Sleep(time.Second * 4)

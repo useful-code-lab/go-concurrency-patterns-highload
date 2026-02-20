@@ -256,6 +256,7 @@ default:
 bash
 go test -race ./...
 
+Решение задачи в файле ``/cmd/adaptive_worker_pool/adaptive_worker_pool.go``
 
 
 
