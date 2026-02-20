@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -41,8 +43,8 @@ func (p *Pool) Worker(tasks <-chan Task) {
 	}
 }
 
-func (p *Pool) NewPool(tasks chan Task, maxWorkers int, minWorker int) {
-	pool := &Pool{
+func NewPool(tasks chan Task, maxWorkers int, minWorker int) *Pool {
+	p := &Pool{
 		Tasks:      tasks,
 		MaxWorkers: maxWorkers,
 		MinWorkers: minWorker,
@@ -53,21 +55,29 @@ func (p *Pool) NewPool(tasks chan Task, maxWorkers int, minWorker int) {
 		p.CurrentWorkers++
 		go p.Worker(tasks)
 	}
+
+	return p
 }
 
 func (p *Pool) Submit(task Task) error {
 	select {
-	case p.tasks <- task:
+	case p.Tasks <- task: //Присваивание в select на случай переполнения канала
 		return nil
 	default:
-		return ErrPoolFull //Возвращаем ошибку если очередь забита
+		return errors.New("Переполнение канала") //Возвращаем ошибку если очередь забита
 	}
 }
 
-func IdleTimeout() {
-
-}
-
 func main() {
+	tasks := make(chan Task, 100)
+	pool := NewPool(tasks, 5, 2)
 
+	for i := range 50 {
+		tasks <- func() {
+			fmt.Printf("Выполняется функция %d", i)
+			time.Sleep(time.Second * 4)
+		}
+	}
+
+	pool.Quit <- true
 }
