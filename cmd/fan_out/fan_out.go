@@ -14,13 +14,19 @@ func WorkerPool(jobs chan Task, wg *sync.WaitGroup) chan Task {
 	for range 5 {
 		wg.Add(1)
 		go func(j chan Task) {
+			defer wg.Done()
 			for task := range j {
 				fmt.Printf("Обрабатывается задача %d\n", task.ID)
 				result <- task
 			}
-			wg.Done()
+
 		}(jobs)
 	}
+
+	go func() {
+		wg.Wait()
+		close(result)
+	}()
 
 	return result
 }
@@ -38,10 +44,6 @@ func main() {
 		close(jobs)
 	}()
 
-	wg.Wait()
-	close(result)
-
-	fmt.Printf("\n\nОбработанные задачи:\n")
 	for task := range result {
 		fmt.Printf("Обработана задача %d\n", task.ID)
 	}
