@@ -21,7 +21,7 @@ type Pool struct {
 }
 
 func (p *Pool) Worker() {
-	p.pg.Done()
+	defer p.pg.Done()
 	idleTimeout := time.Second * 4
 	timer := time.NewTimer(idleTimeout)
 	defer timer.Stop()
@@ -50,8 +50,6 @@ func (p *Pool) Worker() {
 			}
 			p.mu.Unlock()
 			timer.Reset(idleTimeout)
-		case <-p.Quit:
-			return
 		}
 	}
 }
@@ -78,15 +76,22 @@ func NewPool(tasks chan Task, maxWorkers int, minWorker int) *Pool {
 }
 
 func (p *Pool) CreateAutoTask() {
+	ticker := time.NewTicker(time.Millisecond * 500)
+	defer ticker.Stop()
+
 	for {
-		time.Sleep(time.Millisecond * 10)
-		p.mu.Lock()
-		if len(p.Tasks) > 6 && p.CurrentWorkers < p.MaxWorkers {
-			p.CurrentWorkers++
-			p.pg.Add(1)
-			go p.Worker()
+		select {
+		case <-ticker.C:
+			p.mu.Lock()
+			if len(p.Tasks) > 6 && p.CurrentWorkers < p.MaxWorkers {
+				p.CurrentWorkers++
+				p.pg.Add(1)
+				go p.Worker()
+			}
+			p.mu.Unlock()
+		case <-p.Quit:
+			return
 		}
-		p.mu.Unlock()
 	}
 }
 
@@ -99,7 +104,7 @@ func (p *Pool) Submit(task Task) error {
 	}
 }
 
-func (p *Pool) Shutdown(){
+func (p *Pool) Shutdown() {
 	close(p.Tasks)
 	close(p.Quit)
 	p.pg.Wait()
@@ -111,7 +116,7 @@ func main() {
 
 	for i := range 50 {
 		pool.Submit(func() {
-			fmt.Printf("Выполняется функция %d", i)
+			fmt.Printf("Выполняется функция %d\n", i)
 			time.Sleep(time.Second * 4)
 		})
 	}
