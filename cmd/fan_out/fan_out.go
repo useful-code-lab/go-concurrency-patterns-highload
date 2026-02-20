@@ -9,30 +9,29 @@ type Task struct {
 	ID int
 }
 
-func WorkerPool(jobs chan Task) {
+func WorkerPool(jobs chan Task, wg *sync.WaitGroup) {
 	for range 5 {
-		
+		wg.Add(1)
 		go func(j chan Task) {
-			for {
-				select {
-				case task := <-j:
-					fmt.Printf("Обрабатывается задача %d", task.ID)
-				}
+			for task := range j {
+				fmt.Printf("Обрабатывается задача %d\n", task.ID)
 			}
+			wg.Done()
 		}(jobs)
 	}
 }
 
 func main() {
-	wg := sync.WaitGroup{}
+	var wg sync.WaitGroup
 	jobs := make(chan Task, 10)
 
-	for i := range 12 {
-		jobs <- Task{ID: i * 12}
+	WorkerPool(jobs, &wg)
+
+	for i := range 40 {
+		jobs <- Task{ID: i}
 	}
 
-	func() {
-		wg.Wait()
-	}()
+	close(jobs)
 
+	wg.Wait()
 }
