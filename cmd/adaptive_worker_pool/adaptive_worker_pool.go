@@ -115,6 +115,7 @@ func main() {
 	pool := NewPool(tasks, 5, 2)
 
 	for i := 0; i < 50; i++ {
+		i:= i
 		pool.Submit(func() {
 			fmt.Printf("Выполняется функция %d\n", i)
 			time.Sleep(time.Second * 4)
