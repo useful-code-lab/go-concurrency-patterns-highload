@@ -13,16 +13,23 @@ import (
 type Task interface {
 	Execute(ctx context.Context) error
 	GetID() int
+	GetErr() error
+	SetErr(err error)
 }
 
 type EmailTask struct {
 	ID     int
 	Result string
+	Err    error
 }
 
 func (e *EmailTask) GetID() int {
 	return e.ID
 }
+
+func (e *EmailTask) GetErr() error { return e.Err }
+
+func (e *EmailTask) SetErr(err error) { e.Err = err }
 
 func (e *EmailTask) Execute(ctx context.Context) error {
 	select {
@@ -38,11 +45,16 @@ func (e *EmailTask) Execute(ctx context.Context) error {
 type DataTask struct {
 	ID     int
 	Result string
+	Err    error
 }
 
 func (e *DataTask) GetID() int {
 	return e.ID
 }
+
+func (e *DataTask) GetErr() error { return e.Err }
+
+func (e *DataTask) SetErr(err error) { e.Err = err }
 
 func (d *DataTask) Execute(ctx context.Context) error {
 	steps := []string{"cleaning", "tranforming", "saving"}
@@ -65,7 +77,7 @@ type Dispatcher struct {
 	MaxWorkers int
 	wg         sync.WaitGroup
 	Results    chan Task
-	resultWg sync.WaitGroup
+	resultWg   sync.WaitGroup
 }
 
 func (d *Dispatcher) Worker(ctx context.Context) {
@@ -78,11 +90,12 @@ func (d *Dispatcher) Worker(ctx context.Context) {
 			if !ok {
 				return
 			}
-			if err := task.Execute(ctx); err == nil {
-				select {
-				case <-ctx.Done():
-				case d.Results <- task:
-				}
+
+			task.SetErr(task.Execute(ctx))
+
+			select {
+			case <-ctx.Done():
+			case d.Results <- task:
 			}
 		}
 	}
@@ -120,13 +133,17 @@ func main() {
 	dispatcher := newDispatcher()
 	dispatcher.Start(ctx)
 
-
 	dispatcher.resultWg.Add(1)
 
 	go func() {
 		defer dispatcher.resultWg.Done()
 		for result := range dispatcher.Results {
-			fmt.Printf("Результат выполнения задачи %d\n", result.GetID())
+			if err := result.GetErr(); err == nil {
+				fmt.Printf("Задача %d: Успешно\n", result.GetID())
+			} else {
+				fmt.Printf("Задача %d: Ошибка\n", result.GetID())
+			}
+
 		}
 		fmt.Printf("Все результаты выведены.")
 	}()
