@@ -12,11 +12,16 @@ import (
 
 type Task interface {
 	Execute(ctx context.Context) error
+	GetID() int
 }
 
 type EmailTask struct {
 	ID     int
 	Result string
+}
+
+func (e *EmailTask) GetID() int {
+	return e.ID
 }
 
 func (e *EmailTask) Execute(ctx context.Context) error {
@@ -35,6 +40,10 @@ type DataTask struct {
 	Result string
 }
 
+func (e *DataTask) GetID() int {
+	return e.ID
+}
+
 func (d *DataTask) Execute(ctx context.Context) error {
 	steps := []string{"cleaning", "tranforming", "saving"}
 
@@ -44,7 +53,7 @@ func (d *DataTask) Execute(ctx context.Context) error {
 			return ctx.Err()
 		default:
 			fmt.Printf("Шаг %d запущен для таска %d", step, d.ID)
-			time.Sleep(5 * time.Second)
+			time.Sleep(5 * time.Millisecond)
 		}
 	}
 
@@ -63,6 +72,7 @@ func (d *Dispatcher) Worker(ctx context.Context) {
 		select {
 		case task := <-d.JobQueue:
 			task.Execute(ctx)
+			d.wg.Done()
 		case <-ctx.Done():
 			return
 		}
@@ -70,20 +80,16 @@ func (d *Dispatcher) Worker(ctx context.Context) {
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {
-	for {
-		select {
-		case task := <-d.JobQueue:
-			task.Execute(ctx)
-		case <-ctx.Done():
-
-		}
-
+	for range d.MaxWorkers {
+		d.wg.Add(1)
+		go d.Worker(ctx)
 	}
 }
 
 func (d *Dispatcher) Wait() {
 	close(d.JobQueue)
-	d.Wait()
+	close(d.Results)
+	d.wg.Wait()
 }
 
 func newDispatcher() *Dispatcher {
@@ -103,4 +109,33 @@ func main() {
 
 	dispatcher := newDispatcher()
 	dispatcher.Start(ctx)
+
+	go func() {
+		for result := range dispatcher.Results {
+			fmt.Printf("Результат выполнения задачи %d", result.GetID())
+		}
+	}()
+
+Loop:
+	for i := range 20 {
+		var task Task
+		if i%2 == 0 {
+			task = &EmailTask{ID: i}
+		} else {
+			task = &DataTask{ID: i}
+		}
+
+		select {
+		case dispatcher.JobQueue <- task:
+		case <-ctx.Done():
+			break Loop
+		}
+
+		if i == 15 {
+			fmt.Printf("Отменяем оставшиеся задачи %d", i)
+			cancel()
+		}
+	}
+
+	dispatcher.Wait()
 }
