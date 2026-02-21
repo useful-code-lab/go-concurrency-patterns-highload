@@ -27,7 +27,7 @@ func (e *EmailTask) GetID() int {
 func (e *EmailTask) Execute(ctx context.Context) error {
 	select {
 	case <-time.After(time.Second * 2):
-		fmt.Printf("Почта отправлена %d", e.ID)
+		fmt.Printf("Почта отправлена %d\n", e.ID)
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -52,7 +52,7 @@ func (d *DataTask) Execute(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			fmt.Printf("Шаг %d запущен для таска %d", step, d.ID)
+			fmt.Printf("Шаг %s запущен для таска %d\n", step, d.ID)
 			time.Sleep(5 * time.Millisecond)
 		}
 	}
@@ -68,13 +68,17 @@ type Dispatcher struct {
 }
 
 func (d *Dispatcher) Worker(ctx context.Context) {
+	defer d.wg.Done()
 	for {
 		select {
-		case task := <-d.JobQueue:
-			task.Execute(ctx)
-			d.wg.Done()
 		case <-ctx.Done():
 			return
+		case task, ok := <-d.JobQueue:
+			if !ok {
+				return
+			}
+			task.Execute(ctx)
+			d.Results <- task
 		}
 	}
 }
@@ -88,8 +92,8 @@ func (d *Dispatcher) Start(ctx context.Context) {
 
 func (d *Dispatcher) Wait() {
 	close(d.JobQueue)
-	close(d.Results)
 	d.wg.Wait()
+	close(d.Results)
 }
 
 func newDispatcher() *Dispatcher {
@@ -112,7 +116,7 @@ func main() {
 
 	go func() {
 		for result := range dispatcher.Results {
-			fmt.Printf("Результат выполнения задачи %d", result.GetID())
+			fmt.Printf("Результат выполнения задачи %d\n", result.GetID())
 		}
 	}()
 
@@ -132,7 +136,7 @@ Loop:
 		}
 
 		if i == 15 {
-			fmt.Printf("Отменяем оставшиеся задачи %d", i)
+			fmt.Printf("Отменяем оставшиеся задачи %d\n", i)
 			cancel()
 		}
 	}
