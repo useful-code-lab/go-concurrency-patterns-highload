@@ -65,6 +65,7 @@ type Dispatcher struct {
 	MaxWorkers int
 	wg         sync.WaitGroup
 	Results    chan Task
+	resultWg sync.WaitGroup
 }
 
 func (d *Dispatcher) Worker(ctx context.Context) {
@@ -77,8 +78,12 @@ func (d *Dispatcher) Worker(ctx context.Context) {
 			if !ok {
 				return
 			}
-			task.Execute(ctx)
-			d.Results <- task
+			if err := task.Execute(ctx); err == nil {
+				select {
+				case <-ctx.Done():
+				case d.Results <- task:
+				}
+			}
 		}
 	}
 }
@@ -94,6 +99,7 @@ func (d *Dispatcher) Wait() {
 	close(d.JobQueue)
 	d.wg.Wait()
 	close(d.Results)
+	d.resultWg.Wait()
 }
 
 func newDispatcher() *Dispatcher {
@@ -114,10 +120,15 @@ func main() {
 	dispatcher := newDispatcher()
 	dispatcher.Start(ctx)
 
+
+	dispatcher.resultWg.Add(1)
+
 	go func() {
+		defer dispatcher.resultWg.Done()
 		for result := range dispatcher.Results {
 			fmt.Printf("Результат выполнения задачи %d\n", result.GetID())
 		}
+		fmt.Printf("Все результаты выведены.")
 	}()
 
 Loop:
